@@ -1,23 +1,29 @@
 import os
-import requests
-from pathlib import Path
+import json
+from github import Github
 
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-PR_NUMBER = os.getenv("PR_NUMBER")
-REPO_NAME = os.getenv("REPO_NAME")
-
-def post_feedback_to_pr():
-    feedback = Path("ai_feedback.md").read_text()
-    headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
-    }
-    payload = {
-        "body": f"## 🤖 Análise Automática de Código\n\n{feedback}"
-    }
-    url = f"https://api.github.com/repos/{REPO_NAME}/issues/{PR_NUMBER}/comments"
-    response = requests.post(url, headers=headers, json=payload)
-    print(f"✅ Comentário postado! Status: {response.status_code}" if response.status_code == 201 else f"❌ Erro: {response.status_code}")
+def post_comments():
+    GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+    REPO_NAME = os.getenv("GITHUB_REPOSITORY")
+    PR_NUMBER = os.getenv("GITHUB_REF").split("/")[-2]
+    
+    g = Github(GITHUB_TOKEN)
+    repo = g.get_repo(REPO_NAME)
+    pr = repo.get_pull(int(PR_NUMBER))
+    
+    with open("findings.json", "r") as f:
+        findings = json.load(f)
+    
+    for finding in findings:
+        # Postar apenas issues médias/altas para não poluir
+        if finding["severity"] in ["medium", "high"]:
+            pr.create_review_comment(
+                body=f"**{finding['issue']}** (Severity: {finding['severity']})\n\n"
+                     f"Suggestion: {finding['suggestion']}",
+                commit_id=pr.head.sha,
+                path=finding["file"],
+                line=finding["line"]
+            )
 
 if __name__ == "__main__":
-    post_feedback_to_pr()
+    post_comments()
