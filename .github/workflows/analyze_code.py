@@ -1,32 +1,51 @@
-import subprocess
+import os
+import requests
+import openai
+from pathlib import Path
 
-def analyze_pylint():
-    result = subprocess.run(
-        ['pylint', '.', '--disable=R,C', '--output-format=text'],
-        capture_output=True, text=True
+# Configurações
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+PR_NUMBER = os.getenv("PR_NUMBER")
+REPO_NAME = os.getenv("REPO_NAME")
+
+def fetch_pr_diff():
+    """Busca o diff do PR usando a API do GitHub."""
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3.diff"
+    }
+    url = f"https://api.github.com/repos/{REPO_NAME}/pulls/{PR_NUMBER}"
+    response = requests.get(url, headers=headers)
+    return response.text if response.status_code == 200 else None
+
+def analyze_with_ai(diff):
+    """Usa OpenAI para analisar o diff."""
+    openai.api_key = OPENAI_API_KEY
+    prompt = f"""
+    Analise este diff de um Pull Request e:
+    1. Identifique bugs, vulnerabilidades ou más práticas.
+    2. Sugira melhorias (legibilidade, performance, etc.).
+    3. Seja conciso e técnico.
+    4. Inclua exemplos de código quando relevante.
+
+    Diff:
+    {diff[:8000]}  # Limita o tamanho para evitar excesso de tokens
+    """
+    response = openai.ChatCompletion.create(
+        model="gpt-4-turbo-preview",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1500
     )
-    return result.stdout
+    return response.choices[0].message.content
 
-def analyze_flake8():
-    result = subprocess.run(['flake8', '.'], capture_output=True, text=True)
-    return result.stdout
-
-def analyze_bandit():
-    result = subprocess.run(['bandit', '-r', '.'], capture_output=True, text=True)
-    return result.stdout
-
-def main():
-    pylint_result = analyze_pylint()
-    flake8_result = analyze_flake8()
-    bandit_result = analyze_bandit()
-
-    with open("analysis_report.txt", "w") as report_file:
-        report_file.write("### Pylint Report ###\n")
-        report_file.write(pylint_result + "\n")
-        report_file.write("### Flake8 Report ###\n")
-        report_file.write(flake8_result + "\n")
-        report_file.write("### Bandit Report ###\n")
-        report_file.write(bandit_result + "\n")
+def save_feedback(feedback):
+    """Salva o feedback em um arquivo temporário."""
+    Path("ai_feedback.md").write_text(feedback)
 
 if __name__ == "__main__":
-    main()
+    diff = fetch_pr_diff()
+    if diff:
+        feedback = analyze_with_ai(diff)
+        save_feedback(feedback)
+        print("✅ Análise concluída! Feedback salvo em 'ai_feedback.md'.")
