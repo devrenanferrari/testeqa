@@ -3,94 +3,100 @@ import requests
 import json
 from github import Github
 
-# Configuration
+# Configurações da API
 HF_API_URL = "https://api-inference.huggingface.co/models/deepseek-ai/deepseek-coder-33b-instruct"
 HF_TOKEN = os.getenv("HF_TOKEN")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 REPO_NAME = os.getenv("GITHUB_REPOSITORY")
-GITHUB_REF = os.getenv("GITHUB_REF", "refs/pull/1/merge")
+GITHUB_REF = os.getenv("GITHUB_REF", "refs/pull/1/merge")  # Valor padrão para testes
 
 def get_pr_number():
-    """Extract PR number from GITHUB_REF"""
+    """Extrai o número da PR da referência do GitHub"""
     try:
         return int(GITHUB_REF.split('/')[2])
     except (IndexError, ValueError):
-        return 1  # Default for local testing
+        return 1  # Valor padrão para testes locais
 
 def get_diff():
-    """Get PR diff files"""
+    """Obtém os arquivos modificados na PR"""
     g = Github(GITHUB_TOKEN)
     repo = g.get_repo(REPO_NAME)
     return repo.get_pull(get_pr_number()).get_files()
 
-def build_prompt(code_diff):
-    """Build the analysis prompt without any string formatting"""
-    example = {
-        "issues": [{
-            "file": "example.py",
-            "line": 10,
-            "issue": "Potential null reference",
-            "severity": "medium",
-            "suggestion": "Add null check"
-        }]
-    }
-    
-    return [
-        "Analyze this code diff for:",
-        "1. Bugs and logical errors",
-        "2. Security vulnerabilities",
-        "3. Code smells",
-        "4. Performance issues",
-        "5. Style inconsistencies",
-        "",
-        f"Return findings in JSON format like this: {json.dumps(example)}",
-        "",
-        "Code diff to analyze:",
-        code_diff
-    ]
-
-def analyze_with_ai(code_diff):
-    """Send code to AI for analysis"""
+def analyze_code_with_ai(code_diff, filename):
+    """Envia o código para análise pela API da Hugging Face"""
     if not code_diff or not HF_TOKEN:
         return []
     
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    prompt_lines = build_prompt(code_diff)
-    prompt_text = "\n".join(prompt_lines)
+    
+    prompt = f"""
+    Analyze this code diff and identify potential issues:
+    
+    File: {filename}
+    Diff:
+    {code_diff}
+    
+    Return a JSON array with found issues, each with:
+    - line: Line number
+    - issue: Description of the issue
+    - severity: low/medium/high
+    - suggestion: How to fix it
+    
+    Example:
+    [
+        {{
+            "line": 15,
+            "issue": "Possible SQL injection",
+            "severity": "high",
+            "suggestion": "Use parameterized queries"
+        }}
+    ]
+    """
     
     try:
         response = requests.post(
             HF_API_URL,
             headers=headers,
-            json={"inputs": prompt_text},
+            json={"inputs": prompt},
             timeout=60
         )
-        return response.json().get("issues", []) if response.ok else []
+        
+        if response.status_code == 200:
+            try:
+                return response.json()
+            except ValueError:
+                print("Invalid JSON response from API")
+        return []
     except Exception as e:
-        print(f"Analysis failed: {e}")
+        print(f"API Error: {str(e)}")
         return []
 
 def main():
-    """Main execution"""
-    # Verify environment
+    """Função principal de execução"""
+    # Verifica variáveis de ambiente
     if not all([HF_TOKEN, GITHUB_TOKEN, REPO_NAME]):
-        print("Missing required environment variables")
+        print("Variáveis de ambiente ausentes")
         return
     
-    # Process files
     findings = []
+    
+    # Analisa cada arquivo modificado
     for file in get_diff():
         if file.patch:
-            print(f"Analyzing {file.filename}...")
-            for issue in analyze_with_ai(file.patch):
-                issue["file"] = file.filename
-                findings.append(issue)
+            print(f"🔍 Analisando {file.filename}...")
+            issues = analyze_code_with_ai(file.patch, file.filename)
+            
+            if issues and isinstance(issues, list):
+                for issue in issues:
+                    issue["file"] = file.filename
+                    findings.append(issue)
     
-    # Save results
+    # Salva os resultados
     with open("findings.json", "w") as f:
         json.dump({"findings": findings}, f, indent=2)
     
-    print(f"Found {len(findings)} issues")
+    print(f"✅ Análise concluída. {len(findings)} problemas encontrados.")
 
 if __name__ == "__main__":
     main()
