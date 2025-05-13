@@ -1,0 +1,33 @@
+name: Análise de Pull Request
+
+on:
+  pull_request:
+    branches:
+      - main  # Ou a branch principal que você usa
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v2
+
+      - name: Configurar Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Instalar dependências
+        run: |
+          pip install pylint flake8 bandit requests
+
+      - name: Analisar código
+        run: |
+          python3 analyze_code.py
+
+      - name: Criar comentários no PR
+        run: |
+          python3 post_comments.py
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
