@@ -1,8 +1,10 @@
 import os
 import requests
 import json
+import time
 from github import Github
 
+# Configurações
 HF_API_URL = "https://api-inference.huggingface.co/models/deepseek-ai/deepseek-coder-33b-instruct"
 HF_TOKEN = os.getenv("HF_TOKEN")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -14,53 +16,72 @@ def get_pr_files():
     pr_number = int(os.getenv("GITHUB_REF").split('/')[2])
     return repo.get_pull(pr_number).get_files()
 
-def analyze_code(file):
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+def analyze_with_ai(code_diff, filename):
+    headers = {
+        "Authorization": f"Bearer {HF_TOKEN}",
+        "Content-Type": "application/json"
+    }
     
-    # Prompt extremamente específico
-    prompt = f"""ACT AS A SENIOR CODE REVIEWER. Analyze this code CRITICALLY:
+    prompt = f"""Analyze this code diff STRICTLY and report ALL issues:
 
-File: {file.filename}
-Code:
-{file.patch}
+File: {filename}
+Diff:
+{code_diff}
 
-Identify ALL issues including:
-1. SECURITY vulnerabilities (SQLi, XSS, command injection, etc.) - MARK AS HIGH severity
-2. BUGS and logical errors - MARK AS MEDIUM severity
-3. CODE SMELLS (duplication, bad practices) - MARK AS LOW severity
+Identify:
+1. Security issues (SQLi, XSS, command injection, etc.) - HIGH severity
+2. Bugs and logical errors - MEDIUM severity
+3. Code smells (duplication, bad practices) - LOW severity
 
-RETURN ONLY VALID JSON ARRAY with format:
-{{
-  "line": <line_number>,
-  "issue": "<description>",
-  "severity": "<high/medium/low>",
-  "suggestion": "<how_to_fix>"
-}}
+Return VALID JSON array ONLY, example:
+[
+    {{
+        "line": 10,
+        "issue": "SQL injection vulnerability",
+        "severity": "high",
+        "suggestion": "Use parameterized queries"
+    }}
+]"""
 
-BE STRICT! Report ALL issues you find!"""
-
-    try:
-        response = requests.post(
-            HF_API_URL,
-            headers=headers,
-            json={"inputs": prompt},
-            timeout=30
-        )
-        return response.json()
-    except Exception as e:
-        print(f"Error analyzing {file.filename}: {str(e)}")
-        return []
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(
+                HF_API_URL,
+                headers=headers,
+                json={"inputs": prompt},
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                try:
+                    return response.json()
+                except json.JSONDecodeError:
+                    print(f"Invalid JSON response. Raw: {response.text}")
+                    return []
+            
+            print(f"API Error (attempt {attempt + 1}): {response.status_code} - {response.text}")
+            time.sleep(2 ** attempt)  # Backoff exponencial
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Request failed (attempt {attempt + 1}): {str(e)}")
+            time.sleep(2 ** attempt)
+    
+    return []
 
 def main():
     findings = []
+    
     for file in get_pr_files():
-        if file.patch:
+        if file.patch and file.filename.endswith('.py'):  # Analisa apenas Python
             print(f"🔍 Analyzing {file.filename}...")
-            issues = analyze_code(file)
-            if issues:
+            issues = analyze_with_ai(file.patch, file.filename)
+            
+            if isinstance(issues, list):
                 for issue in issues:
-                    issue["file"] = file.filename
-                    findings.append(issue)
+                    if all(key in issue for key in ['line', 'issue', 'severity', 'suggestion']):
+                        issue['file'] = file.filename
+                        findings.append(issue)
     
     with open("findings.json", "w") as f:
         json.dump({"findings": findings}, f, indent=2)
