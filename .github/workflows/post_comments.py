@@ -1,34 +1,39 @@
 import os
+import json
 import requests
 
+# Carrega token e repositório
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-REPO_OWNER = "devrenanferrari"  # Substitua pelo seu usuário no GitHub
-REPO_NAME = "testeqa"  # Substitua pelo nome do seu repositório
-PR_NUMBER = os.getenv("GITHUB_REF").split("/")[-1]  # Pega o número do PR a partir do contexto do GitHub Action
+REPO = os.getenv("GITHUB_REPOSITORY")  # Formato: "owner/repo"
+
+# Carrega o evento do GitHub Actions
+with open("event.json", "r") as f:
+    event_data = json.load(f)
+
+# Extrai o número da PR
+pr_number = event_data["pull_request"]["number"]
 
 # Lê o relatório gerado
 with open("analysis_report.txt", "r") as file:
     report = file.read()
 
-# URL da API para criar comentários no PR
-url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{PR_NUMBER}/comments"
-
-# Dados do comentário
-data = {
-    "body": f"## Relatório de Análise de Código\n\n{report}"
-}
-
-# Cabeçalhos da requisição
+# Prepara a requisição
+url = f"https://api.github.com/repos/{REPO}/issues/{pr_number}/comments"
 headers = {
     "Authorization": f"Bearer {GITHUB_TOKEN}",
-    "Content-Type": "application/json"
+    "Content-Type": "application/json",
+    "Accept": "application/vnd.github.v3+json"
+}
+data = {
+    "body": f"## 🤖 Relatório de Análise de Código\n\n{report}"
 }
 
-# Faz a requisição para criar o comentário
+# Envia o comentário
 response = requests.post(url, json=data, headers=headers)
 
+# Feedback
 if response.status_code == 201:
-    print("Comentário criado com sucesso!")
+    print("✅ Comentário criado com sucesso!")
 else:
-    print(f"Erro ao criar comentário: {response.status_code}")
+    print(f"❌ Erro ao criar comentário: {response.status_code}")
     print(response.text)
