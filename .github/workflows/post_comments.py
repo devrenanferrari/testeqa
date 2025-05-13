@@ -2,22 +2,21 @@ import os
 import json
 import requests
 
-# Carrega token e repositório
+# Lê o token e o repositório (formato: dono/repositorio)
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-REPO = os.getenv("GITHUB_REPOSITORY")  # Formato: "owner/repo"
+REPO = os.getenv("GITHUB_REPOSITORY")
 
-# Carrega o evento do GitHub Actions
+# Lê o arquivo do evento para extrair o número do PR
 with open("event.json", "r") as f:
     event_data = json.load(f)
 
-# Extrai o número da PR
 pr_number = event_data["pull_request"]["number"]
 
-# Lê o relatório gerado
+# Lê o relatório
 with open("analysis_report.txt", "r") as file:
     report = file.read()
 
-# Prepara a requisição
+# Envia o comentário para o PR
 url = f"https://api.github.com/repos/{REPO}/issues/{pr_number}/comments"
 headers = {
     "Authorization": f"Bearer {GITHUB_TOKEN}",
@@ -28,10 +27,8 @@ data = {
     "body": f"## 🤖 Relatório de Análise de Código\n\n{report}"
 }
 
-# Envia o comentário
 response = requests.post(url, json=data, headers=headers)
 
-# Feedback
 if response.status_code == 201:
     print("✅ Comentário criado com sucesso!")
 else:
