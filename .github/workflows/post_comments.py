@@ -1,32 +1,35 @@
 import os
-import json
 import requests
+import json
 
-# Lê o token e o repositório (formato: dono/repositorio)
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-REPO = os.getenv("GITHUB_REPOSITORY")
+EVENT_PATH = os.getenv("GITHUB_EVENT_PATH")
 
-# Lê o arquivo do evento para extrair o número do PR
-with open("event.json", "r") as f:
-    event_data = json.load(f)
+# Carrega o número do PR a partir do arquivo de evento
+with open(EVENT_PATH, "r") as f:
+    event = json.load(f)
+    pr_number = event["pull_request"]["number"]
+    repo_full = event["repository"]["full_name"]
 
-pr_number = event_data["pull_request"]["number"]
-
-# Lê o relatório
+# Lê o relatório gerado
 with open("analysis_report.txt", "r") as file:
     report = file.read()
 
-# Envia o comentário para o PR
-url = f"https://api.github.com/repos/{REPO}/issues/{pr_number}/comments"
-headers = {
-    "Authorization": f"Bearer {GITHUB_TOKEN}",
-    "Content-Type": "application/json",
-    "Accept": "application/vnd.github.v3+json"
-}
+# URL da API para criar comentários no PR
+url = f"https://api.github.com/repos/{repo_full}/issues/{pr_number}/comments"
+
+# Dados do comentário
 data = {
-    "body": f"## 🤖 Relatório de Análise de Código\n\n{report}"
+    "body": f"## 🤖 Relatório de Análise de Código Automática\n\n```\n{report}\n```"
 }
 
+# Cabeçalhos da requisição
+headers = {
+    "Authorization": f"Bearer {GITHUB_TOKEN}",
+    "Content-Type": "application/json"
+}
+
+# Faz a requisição para criar o comentário
 response = requests.post(url, json=data, headers=headers)
 
 if response.status_code == 201:
