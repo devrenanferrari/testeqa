@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+permissions:
+  pull-requests: write
+
 jobs:
   analyze:
     runs-on: ubuntu-latest
@@ -20,7 +23,7 @@ jobs:
 
       - name: Instalar dependências
         run: |
-          pip install pylint flake8 bandit requests
+          pip install flake8 requests
 
       - name: Analisar código
         run: |
