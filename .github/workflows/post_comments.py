@@ -1,39 +1,25 @@
 import os
 import requests
-import json
+from pathlib import Path
 
+# Configurações
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-EVENT_PATH = os.getenv("GITHUB_EVENT_PATH")
+PR_NUMBER = os.getenv("PR_NUMBER")
+REPO_NAME = os.getenv("REPO_NAME")
 
-# Carrega o número do PR a partir do arquivo de evento
-with open(EVENT_PATH, "r") as f:
-    event = json.load(f)
-    pr_number = event["pull_request"]["number"]
-    repo_full = event["repository"]["full_name"]
+def post_feedback_to_pr():
+    """Posta o feedback da OpenAI como comentário no PR."""
+    feedback = Path("ai_feedback.md").read_text()
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    payload = {
+        "body": f"## 🤖 Análise Automática de Código\n\n{feedback}"
+    }
+    url = f"https://api.github.com/repos/{REPO_NAME}/issues/{PR_NUMBER}/comments"
+    response = requests.post(url, headers=headers, json=payload)
+    print(f"✅ Comentário postado! Status: {response.status_code}" if response.status_code == 201 else f"❌ Erro: {response.status_code}")
 
-# Lê o relatório gerado
-with open("analysis_report.txt", "r") as file:
-    report = file.read()
-
-# URL da API para criar comentários no PR
-url = f"https://api.github.com/repos/{repo_full}/issues/{pr_number}/comments"
-
-# Dados do comentário
-data = {
-    "body": f"## 🤖 Relatório de Análise de Código Automática\n\n```\n{report}\n```"
-}
-
-# Cabeçalhos da requisição
-headers = {
-    "Authorization": f"Bearer {GITHUB_TOKEN}",
-    "Content-Type": "application/json"
-}
-
-# Faz a requisição para criar o comentário
-response = requests.post(url, json=data, headers=headers)
-
-if response.status_code == 201:
-    print("✅ Comentário criado com sucesso!")
-else:
-    print(f"❌ Erro ao criar comentário: {response.status_code}")
-    print(response.text)
+if __name__ == "__main__":
+    post_feedback_to_pr()
