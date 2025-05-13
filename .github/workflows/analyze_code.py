@@ -1,6 +1,6 @@
 import os
 import requests
-import openai
+from openai import OpenAI
 from pathlib import Path
 
 # Configurações
@@ -9,8 +9,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PR_NUMBER = os.getenv("PR_NUMBER")
 REPO_NAME = os.getenv("REPO_NAME")
 
+client = OpenAI(api_key=OPENAI_API_KEY)
+
 def fetch_pr_diff():
-    """Busca o diff do PR usando a API do GitHub."""
     headers = {
         "Authorization": f"Bearer {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3.diff"
@@ -20,8 +21,6 @@ def fetch_pr_diff():
     return response.text if response.status_code == 200 else None
 
 def analyze_with_ai(diff):
-    """Usa OpenAI para analisar o diff."""
-    openai.api_key = OPENAI_API_KEY
     prompt = f"""
     Analise este diff de um Pull Request e:
     1. Identifique bugs, vulnerabilidades ou más práticas.
@@ -30,17 +29,16 @@ def analyze_with_ai(diff):
     4. Inclua exemplos de código quando relevante.
 
     Diff:
-    {diff[:8000]}  # Limita o tamanho para evitar excesso de tokens
+    {diff[:8000]}
     """
-    response = openai.ChatCompletion.create(
-        model="gpt-4-turbo-preview",
+    response = client.chat.completions.create(
+        model="gpt-4-turbo",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=1500
     )
     return response.choices[0].message.content
 
 def save_feedback(feedback):
-    """Salva o feedback em um arquivo temporário."""
     Path("ai_feedback.md").write_text(feedback)
 
 if __name__ == "__main__":
