@@ -1,49 +1,68 @@
 import os
 import requests
-from openai import OpenAI
-from pathlib import Path
+from github import Github
 
 # Configurações
+HF_API_URL = "https://api-inference.huggingface.co/models/deepseek-ai/deepseek-coder-33b-instruct"
+HF_TOKEN = os.getenv("HF_TOKEN")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-PR_NUMBER = os.getenv("PR_NUMBER")
-REPO_NAME = os.getenv("REPO_NAME")
+REPO_NAME = os.getenv("GITHUB_REPOSITORY")
+PR_NUMBER = os.getenv("GITHUB_REF").split("/")[-2]
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+def get_diff():
+    g = Github(GITHUB_TOKEN)
+    repo = g.get_repo(REPO_NAME)
+    pull_request = repo.get_pull(int(PR_NUMBER))
+    
+    # Obter diff completo
+    return pull_request.get_files()
 
-def fetch_pr_diff():
-    headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3.diff"
+def analyze_with_ai(code_diff):
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    
+    prompt = """
+    Analyze this code diff for:
+    1. Potential bugs
+    2. Security vulnerabilities
+    3. Code smells
+    4. Performance issues
+    5. Style inconsistencies
+    
+    Return findings in this format:
+    {
+        "file": "filename",
+        "line": number,
+        "issue": "description",
+        "severity": "low/medium/high",
+        "suggestion": "how to fix"
     }
-    url = f"https://api.github.com/repos/{REPO_NAME}/pulls/{PR_NUMBER}"
-    response = requests.get(url, headers=headers)
-    return response.text if response.status_code == 200 else None
-
-def analyze_with_ai(diff):
-    prompt = f"""
-    Analise este diff de um Pull Request e:
-    1. Identifique bugs, vulnerabilidades ou más práticas.
-    2. Sugira melhorias (legibilidade, performance, etc.).
-    3. Seja conciso e técnico.
-    4. Inclua exemplos de código quando relevante.
-
-    Diff:
-    {diff[:8000]}
+    
+    Code diff:
+    {code_diff}
     """
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=1500
+    
+    response = requests.post(
+        HF_API_URL,
+        headers=headers,
+        json={"inputs": prompt.format(code_diff=code_diff)}
     )
-    return response.choices[0].message.content
+    
+    return response.json()
 
-def save_feedback(feedback):
-    Path("ai_feedback.md").write_text(feedback)
+def main():
+    files = get_diff()
+    findings = []
+    
+    for file in files:
+        analysis = analyze_with_ai(file.patch)
+        if isinstance(analysis, list):
+            findings.extend(analysis)
+        elif isinstance(analysis, dict):
+            findings.append(analysis)
+    
+    # Salvar resultados para post_comments.py
+    with open("findings.json", "w") as f:
+        json.dump(findings, f)
 
 if __name__ == "__main__":
-    diff = fetch_pr_diff()
-    if diff:
-        feedback = analyze_with_ai(diff)
-        save_feedback(feedback)
-        print("✅ Análise concluída! Feedback salvo em 'ai_feedback.md'.")
+    main()
