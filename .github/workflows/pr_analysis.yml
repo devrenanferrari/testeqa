@@ -26,5 +26,5 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
         run: |
-          python analyze_code.py
-          python post_comments.py
+          python .github/workflows/analyze_code.py
+          python .github/workflows/post_comments.py
