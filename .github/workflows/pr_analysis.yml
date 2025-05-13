@@ -3,7 +3,7 @@ name: Análise de Pull Request
 on:
   pull_request:
     branches:
-      - main  # Ou a branch principal que você usa
+      - main
 
 jobs:
   analyze:
@@ -25,6 +25,10 @@ jobs:
       - name: Analisar código
         run: |
           python3 .github/workflows/analyze_code.py
+
+      - name: Salvar evento do GitHub
+        run: |
+          cp $GITHUB_EVENT_PATH event.json
 
       - name: Criar comentários no PR
         run: |
