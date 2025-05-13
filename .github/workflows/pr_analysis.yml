@@ -24,10 +24,10 @@ jobs:
 
       - name: Analisar código
         run: |
-          python3 analyze_code.py
+          python3 .github/workflows/analyze_code.py
 
       - name: Criar comentários no PR
         run: |
-          python3 post_comments.py
+          python3 .github/workflows/post_comments.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
