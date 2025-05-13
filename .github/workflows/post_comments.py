@@ -2,13 +2,11 @@ import os
 import requests
 from pathlib import Path
 
-# Configurações
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 PR_NUMBER = os.getenv("PR_NUMBER")
 REPO_NAME = os.getenv("REPO_NAME")
 
 def post_feedback_to_pr():
-    """Posta o feedback da OpenAI como comentário no PR."""
     feedback = Path("ai_feedback.md").read_text()
     headers = {
         "Authorization": f"Bearer {GITHUB_TOKEN}",
