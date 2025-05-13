@@ -6,7 +6,7 @@ on:
       - main
 
 permissions:
-  pull-requests: write
+  pull-requests: write  # Permite escrever comentários no PR
 
 jobs:
   analyze:
@@ -23,7 +23,8 @@ jobs:
 
       - name: Instalar dependências
         run: |
-          pip install flake8 requests
+          python -m pip install --upgrade pip
+          pip install pylint flake8 bandit requests
 
       - name: Analisar código
         run: |
