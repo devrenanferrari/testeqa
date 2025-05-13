@@ -1,28 +1,26 @@
-name: PR AI Code Review
-on:
-  pull_request:
-    types: [opened, synchronize]
+name: AI Code Review
+on: [pull_request]
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0  # Necessário para obter diff completo
+      
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
-
+          python-version: '3.10'
+      
       - name: Install dependencies
-        run: pip install --upgrade openai requests python-dotenv
-
-      - name: Run AI Analysis
+        run: pip install -r requirements.txt
+      
+      - name: Run AI Code Analysis
         env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPO_NAME: ${{ github.repository }}
         run: |
           python .github/workflows/analyze_code.py
           python .github/workflows/post_comments.py
