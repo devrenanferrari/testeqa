@@ -7,48 +7,40 @@ from github import Github
 
 # Configurações
 API_URL = "https://router.huggingface.co/hyperbolic/v1/chat/completions"
-HF_TOKEN = "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"  # Substitua por um segredo (ex.: secrets.HF_TOKEN)
+HF_TOKEN = "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"  # Seu token
 MODEL_NAME = "deepseek-ai/DeepSeek-R1"
-CODEX_TOKEN = os.getenv("CODEX_TOKEN")  # Usando o token personalizado
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 REPO_NAME = os.getenv("GITHUB_REPOSITORY")
 
 def obter_arquivos_pr():
     """Obtém os arquivos modificados na Pull Request"""
-    if not CODEX_TOKEN:
-        print("❌ Erro: CODEX_TOKEN não está configurado.")
-        return []
-    
     try:
-        g = Github(CODEX_TOKEN)
+        g = Github(GITHUB_TOKEN)
         repo = g.get_repo(REPO_NAME)
-        ref = os.getenv("GITHUB_REF", "")
-        numero_pr = int(re.search(r"refs/pull/(\d+)/merge", ref).group(1)) if re.search(r"refs/pull/(\d+)/merge", ref) else None
-        if not numero_pr:
-            print("❌ Erro: Não foi possível determinar o número do pull request.")
-            return []
+        numero_pr = int(os.getenv("GITHUB_REF").split('/')[2])
         return repo.get_pull(numero_pr).get_files()
     except Exception as e:
         print(f"❌ Erro ao obter arquivos da PR: {str(e)}")
         return []
 
 def extrair_json_da_resposta(conteudo):
-    """Extrai JSON da resposta da API de forma robusta"""
+    """Versão robusta para extrair JSON mesmo com texto adicional"""
     try:
-        conteudo_limpo = re.sub(r'[^\x20-\x7E\n\t]', '', conteudo)
-        padrao_json = r'\[\s*\{.*?\}\s*\]'
-        match = re.search(padrao_json, conteudo_limpo, re.DOTALL)
+        # Padrão para encontrar o JSON na resposta
+        padrao_json = r'(\[\s*\{.*?\}\s*\])'
+        match = re.search(padrao_json, conteudo, re.DOTALL)
         
         if match:
-            json_str = match.group(1).replace("\\n", "").replace("\\t", "").strip()
+            json_str = match.group(1)
+            # Remove caracteres problemáticos antes do parsing
+            json_str = json_str.replace("\\n", "").replace("\\t", "")
             return json.loads(json_str)
         
-        return json.loads(conteudo_limpo)
+        # Tenta parsear como JSON puro se não encontrar padrão
+        return json.loads(conteudo)
     except json.JSONDecodeError as e:
         print(f"❌ Falha ao decodificar JSON: {str(e)}")
-        print(f"Conteúdo problemático: {conteudo[:500]}...")
-        return []
-    except Exception as e:
-        print(f"❌ Erro ao processar resposta: {str(e)}")
+        print(f"Conteúdo problemático: {conteudo[:500]}...")  # Log parcial
         return []
 
 def analisar_com_ia(diff_codigo, nome_arquivo):
@@ -89,7 +81,7 @@ Formato exigido:
                         "role": "system",
                         "content": "Você é um analisador de código Python. Siga EXATAMENTE o formato solicitado."
                     }, {
-                        "role": "user",
+                        "role": "user", 
                         "content": prompt
                     }],
                     "model": MODEL_NAME,
@@ -108,14 +100,10 @@ Formato exigido:
             print(f"⚠️ Erro na API (tentativa {tentativa+1}): {resposta.status_code} - {resposta.text}")
             time.sleep(2 ** tentativa)
             
-        except requests.RequestException as e:
+        except Exception as e:
             print(f"⚠️ Falha na requisição (tentativa {tentativa+1}): {str(e)}")
             time.sleep(2 ** tentativa)
-        except Exception as e:
-            print(f"⚠️ Erro inesperado (tentativa {tentativa+1}): {str(e)}")
-            time.sleep(2 ** tentativa)
     
-    print("❌ Falha após 3 tentativas. Análise abortada.")
     return []
 
 def principal():
@@ -130,7 +118,6 @@ def principal():
 
         for arquivo in arquivos:
             if not arquivo.patch:
-                print(f"ℹ️ Nenhum diff disponível para {arquivo.filename}")
                 continue
                 
             print(f"\n🔍 Analisando {arquivo.filename}...")
@@ -142,8 +129,6 @@ def principal():
                         item['arquivo'] = arquivo.filename
                         problemas.append(item)
                         print(f"   ✅ Problema: {item['problema']} (linha {item['linha']})")
-                    else:
-                        print(f"⚠️ Formato inválido de item em {arquivo.filename}: {item}")
             else:
                 print(f"⚠️ Formato inválido de retorno para {arquivo.filename}")
 
