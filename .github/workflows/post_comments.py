@@ -38,7 +38,7 @@ def post_comments():
 
         g = Github(github_token)
         repo = g.get_repo(repo_name)
-        
+
         # Obtém o número da PR
         try:
             pr_ref = os.getenv("GITHUB_REF", "")
@@ -47,11 +47,7 @@ def post_comments():
         except (IndexError, ValueError):
             print("❌ Could not determine PR number from GITHUB_REF")
             return
-        
-        # Obtém o commit mais recente da PR
-        commit = pr.get_commits().reversed[0]
-        
-        # Posta os comentários
+
         posted_comments = 0
         for finding in findings:
             try:
@@ -66,18 +62,13 @@ def post_comments():
                     f"🚨 **{finding['issue']}**\n\n"
                     f"📌 **Severity:** {finding['severity'].upper()}\n"
                     f"💡 **Suggestion:** {finding['suggestion']}\n"
-                    f"🔗 **File:** {finding['file']}#L{finding['line']}"
+                    f"🔗 **File:** `{finding['file']}` Line `{finding['line']}`"
                 )
 
-                # Método correto para postar comentários em PRs
-                pr.create_review_comment(
-                    body=comment_body,
-                    path=finding['file'],
-                    position=1,  # Posição no diff (pode precisar de ajuste)
-                    commit_id=commit.sha
-                )
+                # Posta comentário geral na PR
+                pr.create_issue_comment(comment_body)
                 posted_comments += 1
-                
+
             except GithubException as ge:
                 print(f"⚠️ GitHub API error for {finding.get('file', 'unknown')}: {str(ge)}")
             except Exception as e:
