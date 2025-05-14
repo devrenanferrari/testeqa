@@ -2,8 +2,9 @@ name: Codex Review 🤖
 on: [pull_request]
 
 permissions:
-  pull-requests: write  # Necessário para postar comentários
-  contents: read        # Necessário para acessar o código
+  contents: read
+  pull-requests: write  # Permissão ESSENCIAL para comentar
+  issues: write         # Permissão adicional que pode ser necessária
 
 jobs:
   analyze:
@@ -11,25 +12,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Pega histórico completo para diff
+          fetch-depth: 0
 
-      - name: Configurar Git (Identidade do Codex)
+      - name: Configurar identidade do bot
         run: |
-          git config --global user.name "Codex"
-          git config --global user.email "lojashopify1337@gmail.com"
+          git config --global user.name "Renanzinho"
+          git config --global user.email "renanzinho-bot@users.noreply.github.com"
 
-      - name: Set up Python
+      - name: Configurar Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
-        run: pip install -r .github/workflows/requirements.txt
+      - name: Instalar dependências
+        run: pip install PyGithub requests python-dotenv
 
-      - name: Run AI Code Analysis
+      - name: Executar análise
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.CODEX_TOKEN }}  # Usa o token da conta codex1337-bot
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Use o token padrão do GitHub Actions
         run: |
           python .github/workflows/analyze_code.py
           python .github/workflows/post_comments.py
