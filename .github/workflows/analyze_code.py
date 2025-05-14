@@ -5,8 +5,9 @@ import time
 from github import Github
 
 # Configurações
-HF_API_URL = "https://api-inference.huggingface.co/models/deepseek-ai/deepseek-coder-33b-instruct"
-HF_TOKEN = os.getenv("HF_TOKEN")
+API_URL = "https://router.huggingface.co/hyperbolic/v1/chat/completions"
+HF_TOKEN = "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"  # Seu token
+MODEL_NAME = "deepseek-ai/DeepSeek-R1"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 REPO_NAME = os.getenv("GITHUB_REPOSITORY")
 
@@ -22,46 +23,61 @@ def analyze_with_ai(code_diff, filename):
         "Content-Type": "application/json"
     }
     
-    prompt = f"""Analyze this code diff STRICTLY and report ALL issues:
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a senior code reviewer. Analyze the code strictly and report all issues."
+        },
+        {
+            "role": "user",
+            "content": f"""Analyze this code diff for File: {filename}
 
-File: {filename}
-Diff:
 {code_diff}
 
 Identify:
-1. Security issues (SQLi, XSS, command injection, etc.) - HIGH severity
-2. Bugs and logical errors - MEDIUM severity
-3. Code smells (duplication, bad practices) - LOW severity
+1. Security issues (SQLi, XSS, command injection)
+2. Bugs and logical errors
+3. Code smells (duplication, bad practices)
 
-Return VALID JSON array ONLY, example:
+Return ONLY valid JSON array in this format:
 [
     {{
-        "line": 10,
-        "issue": "SQL injection vulnerability",
-        "severity": "high",
-        "suggestion": "Use parameterized queries"
+        "line": <number>,
+        "issue": "<description>",
+        "severity": "high/medium/low",
+        "suggestion": "<how_to_fix>"
     }}
 ]"""
+        }
+    ]
 
     max_retries = 3
     for attempt in range(max_retries):
         try:
             response = requests.post(
-                HF_API_URL,
+                API_URL,
                 headers=headers,
-                json={"inputs": prompt},
+                json={
+                    "messages": messages,
+                    "model": MODEL_NAME,
+                    "temperature": 0.1  # Mais determinístico
+                },
                 timeout=60
             )
             
             if response.status_code == 200:
                 try:
-                    return response.json()
-                except json.JSONDecodeError:
-                    print(f"Invalid JSON response. Raw: {response.text}")
+                    # Extrai o conteúdo JSON da resposta do chat
+                    chat_response = response.json()
+                    content = chat_response["choices"][0]["message"]["content"]
+                    return json.loads(content)
+                except (json.JSONDecodeError, KeyError) as e:
+                    print(f"Failed to parse response: {str(e)}")
+                    print(f"Raw response: {chat_response}")
                     return []
             
             print(f"API Error (attempt {attempt + 1}): {response.status_code} - {response.text}")
-            time.sleep(2 ** attempt)  # Backoff exponencial
+            time.sleep(2 ** attempt)
             
         except requests.exceptions.RequestException as e:
             print(f"Request failed (attempt {attempt + 1}): {str(e)}")
@@ -73,7 +89,7 @@ def main():
     findings = []
     
     for file in get_pr_files():
-        if file.patch and file.filename.endswith('.py'):  # Analisa apenas Python
+        if file.patch and file.filename.endswith('.py'):
             print(f"🔍 Analyzing {file.filename}...")
             issues = analyze_with_ai(file.patch, file.filename)
             
