@@ -12,63 +12,63 @@ MODEL_NAME = "deepseek-ai/DeepSeek-R1"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 REPO_NAME = os.getenv("GITHUB_REPOSITORY")
 
-def get_pr_files():
-    """Obtém os arquivos modificados na PR"""
+def obter_arquivos_pr():
+    """Obtém os arquivos modificados na Pull Request"""
     g = Github(GITHUB_TOKEN)
     repo = g.get_repo(REPO_NAME)
-    pr_number = int(os.getenv("GITHUB_REF").split('/')[2])
-    return repo.get_pull(pr_number).get_files()
+    numero_pr = int(os.getenv("GITHUB_REF").split('/')[2])
+    return repo.get_pull(numero_pr).get_files()
 
-def extract_json_from_response(content):
+def extrair_json_da_resposta(conteudo):
     """Extrai o JSON da resposta do modelo, mesmo com texto adicional"""
     try:
         # Tenta encontrar um bloco JSON na resposta
-        json_match = re.search(r'\[.*\]', content, re.DOTALL)
+        json_match = re.search(r'\[.*\]', conteudo, re.DOTALL)
         if json_match:
             return json.loads(json_match.group(0))
-        return json.loads(content)
+        return json.loads(conteudo)
     except json.JSONDecodeError:
-        print(f"Could not extract JSON from: {content}")
+        print(f"Não foi possível extrair JSON de: {conteudo}")
         return []
 
-def analyze_with_ai(code_diff, filename):
+def analisar_com_ia(diff_codigo, nome_arquivo):
     """Analisa o código usando a API da Hugging Face"""
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
         "Content-Type": "application/json"
     }
     
-    messages = [
+    mensagens = [
         {
             "role": "system",
-            "content": "You are a strict code reviewer. Return ONLY valid JSON array with found issues."
+            "content": "Você é um analisador de código rigoroso. Retorne APENAS um array JSON com problemas encontrados."
         },
         {
             "role": "user",
-            "content": f"""Analyze this Python code diff for File: {filename}
+            "content": f"""Analise este diff de código Python para o arquivo: {nome_arquivo}
 
-{code_diff}
+{diff_codigo}
 
-Return JSON array with format:
+Retorne um array JSON com o formato:
 [
     {{
-        "line": <number>,
-        "issue": "<description>",
-        "severity": "high/medium/low",
-        "suggestion": "<how_to_fix>"
+        "linha": <número>,
+        "problema": "<descrição>",
+        "gravidade": "alta/media/baixa",
+        "sugestao": "<como_corrigir>"
     }}
 ]"""
         }
     ]
 
-    max_retries = 3
-    for attempt in range(max_retries):
+    tentativas_maximas = 3
+    for tentativa in range(tentativas_maximas):
         try:
-            response = requests.post(
+            resposta = requests.post(
                 API_URL,
                 headers=headers,
                 json={
-                    "messages": messages,
+                    "messages": mensagens,
                     "model": MODEL_NAME,
                     "temperature": 0.1,
                     "response_format": {"type": "json_object"}
@@ -76,49 +76,49 @@ Return JSON array with format:
                 timeout=60
             )
             
-            if response.status_code == 200:
+            if resposta.status_code == 200:
                 try:
-                    chat_response = response.json()
-                    content = chat_response["choices"][0]["message"]["content"]
-                    print(f"Raw API response: {content}")  # Debug
-                    return extract_json_from_response(content)
+                    resposta_chat = resposta.json()
+                    conteudo = resposta_chat["choices"][0]["message"]["content"]
+                    print(f"Resposta bruta da API: {conteudo}")  # Debug
+                    return extrair_json_da_resposta(conteudo)
                 except (KeyError, json.JSONDecodeError) as e:
-                    print(f"Parse error: {str(e)}")
+                    print(f"Erro ao analisar resposta: {str(e)}")
                     return []
             
-            print(f"API Error (attempt {attempt + 1}): {response.status_code} - {response.text}")
-            time.sleep(2 ** attempt)
+            print(f"Erro na API (tentativa {tentativa + 1}): {resposta.status_code} - {resposta.text}")
+            time.sleep(2 ** tentativa)
             
         except requests.exceptions.RequestException as e:
-            print(f"Request failed (attempt {attempt + 1}): {str(e)}")
-            time.sleep(2 ** attempt)
+            print(f"Falha na requisição (tentativa {tentativa + 1}): {str(e)}")
+            time.sleep(2 ** tentativa)
     
     return []
 
-def main():
-    """Função principal"""
-    findings = []
+def principal():
+    """Função principal de execução"""
+    problemas_encontrados = []
     
     try:
-        files = get_pr_files()
-        for file in files:
-            if file.patch and file.filename.endswith('.py'):
-                print(f"🔍 Analyzing {file.filename}...")
-                issues = analyze_with_ai(file.patch, file.filename)
+        arquivos = obter_arquivos_pr()
+        for arquivo in arquivos:
+            if arquivo.patch and arquivo.filename.endswith('.py'):
+                print(f"🔍 Analisando {arquivo.filename}...")
+                problemas = analisar_com_ia(arquivo.patch, arquivo.filename)
                 
-                if isinstance(issues, list):
-                    for issue in issues:
-                        if all(key in issue for key in ['line', 'issue', 'severity', 'suggestion']):
-                            issue['file'] = file.filename
-                            findings.append(issue)
-                            print(f"Found issue: {issue}")
+                if isinstance(problemas, list):
+                    for problema in problemas:
+                        if all(chave in problema for chave in ['linha', 'problema', 'gravidade', 'sugestao']):
+                            problema['arquivo'] = arquivo.filename
+                            problemas_encontrados.append(problema)
+                            print(f"Problema encontrado: {problema}")
     except Exception as e:
-        print(f"Error in main execution: {str(e)}")
+        print(f"Erro na execução principal: {str(e)}")
     
-    with open("findings.json", "w") as f:
-        json.dump({"findings": findings}, f, indent=2)
+    with open("findings.json", "w", encoding='utf-8') as f:
+        json.dump({"problemas": problemas_encontrados}, f, indent=2, ensure_ascii=False)
     
-    print(f"✅ Found {len(findings)} issues")
+    print(f"✅ Encontrados {len(problemas_encontrados)} problemas")
 
 if __name__ == "__main__":
-    main()
+    principal()
