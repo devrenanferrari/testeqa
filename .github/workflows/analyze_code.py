@@ -12,6 +12,13 @@ MODEL_NAME = "deepseek-ai/DeepSeek-R1"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 REPO_NAME = os.getenv("GITHUB_REPOSITORY")
 
+def get_pr_files():
+    """Obtém os arquivos modificados na PR"""
+    g = Github(GITHUB_TOKEN)
+    repo = g.get_repo(REPO_NAME)
+    pr_number = int(os.getenv("GITHUB_REF").split('/')[2])
+    return repo.get_pull(pr_number).get_files()
+
 def extract_json_from_response(content):
     """Extrai o JSON da resposta do modelo, mesmo com texto adicional"""
     try:
@@ -25,6 +32,7 @@ def extract_json_from_response(content):
         return []
 
 def analyze_with_ai(code_diff, filename):
+    """Analisa o código usando a API da Hugging Face"""
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
         "Content-Type": "application/json"
@@ -63,7 +71,7 @@ Return JSON array with format:
                     "messages": messages,
                     "model": MODEL_NAME,
                     "temperature": 0.1,
-                    "response_format": {"type": "json_object"}  # Força resposta JSON
+                    "response_format": {"type": "json_object"}
                 },
                 timeout=60
             )
@@ -88,19 +96,24 @@ Return JSON array with format:
     return []
 
 def main():
+    """Função principal"""
     findings = []
     
-    for file in get_pr_files():
-        if file.patch and file.filename.endswith('.py'):
-            print(f"🔍 Analyzing {file.filename}...")
-            issues = analyze_with_ai(file.patch, file.filename)
-            
-            if isinstance(issues, list):
-                for issue in issues:
-                    if all(key in issue for key in ['line', 'issue', 'severity', 'suggestion']):
-                        issue['file'] = file.filename
-                        findings.append(issue)
-                        print(f"Found issue: {issue}")  # Debug
+    try:
+        files = get_pr_files()
+        for file in files:
+            if file.patch and file.filename.endswith('.py'):
+                print(f"🔍 Analyzing {file.filename}...")
+                issues = analyze_with_ai(file.patch, file.filename)
+                
+                if isinstance(issues, list):
+                    for issue in issues:
+                        if all(key in issue for key in ['line', 'issue', 'severity', 'suggestion']):
+                            issue['file'] = file.filename
+                            findings.append(issue)
+                            print(f"Found issue: {issue}")
+    except Exception as e:
+        print(f"Error in main execution: {str(e)}")
     
     with open("findings.json", "w") as f:
         json.dump({"findings": findings}, f, indent=2)
