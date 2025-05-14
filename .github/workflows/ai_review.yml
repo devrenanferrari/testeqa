@@ -1,6 +1,9 @@
 name: AI Code Review
 on: [pull_request]
 
+permissions:
+  pull-requests: write  # 👈 Permissão necessária para postar comentários na PR
+
 jobs:
   analyze:
     runs-on: ubuntu-latest
