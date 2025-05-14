@@ -30,7 +30,7 @@ jobs:
       - name: Executar análise
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Use o token padrão do GitHub Actions
+          CODEX_TOKEN: ${{ secrets.CODEX_TOKEN }}  # Use o segredo personalizado
         run: |
           python .github/workflows/analyze_code.py
           python .github/workflows/post_comments.py
