@@ -3,83 +3,84 @@ import json
 from github import Github
 from github.GithubException import GithubException
 
-def load_findings():
+def carregar_resultados():
     """Carrega os resultados da análise do arquivo JSON"""
     try:
         with open("findings.json", "r", encoding='utf-8') as f:
-            data = json.load(f)
-            return data.get("findings", [])
+            dados = json.load(f)
+            return dados.get("problemas", [])  # Agora usando "problemas" em vez de "findings"
     except FileNotFoundError:
-        print("❌ Error: findings.json not found")
+        print("❌ Erro: Arquivo findings.json não encontrado")
     except json.JSONDecodeError:
-        print("❌ Error: Invalid JSON format in findings.json")
+        print("❌ Erro: Formato JSON inválido no arquivo findings.json")
     except Exception as e:
-        print(f"❌ Unexpected error loading findings: {str(e)}")
+        print(f"❌ Erro inesperado ao carregar resultados: {str(e)}")
     return []
 
-def post_comments():
-    findings = load_findings()
+def postar_comentarios():
+    problemas = carregar_resultados()
     
-    if not findings:
-        print("✅ No issues found to comment")
+    if not problemas:
+        print("✅ Nenhum problema encontrado para comentar")
         return
 
     try:
         # Configuração do GitHub
-        github_token = os.getenv("GITHUB_TOKEN")
-        if not github_token:
-            print("❌ GITHUB_TOKEN environment variable is missing")
+        token_github = os.getenv("GITHUB_TOKEN")
+        if not token_github:
+            print("❌ Variável de ambiente GITHUB_TOKEN não encontrada")
             return
 
-        repo_name = os.getenv("GITHUB_REPOSITORY")
-        if not repo_name:
-            print("❌ GITHUB_REPOSITORY environment variable is missing")
+        nome_repositorio = os.getenv("GITHUB_REPOSITORY")
+        if not nome_repositorio:
+            print("❌ Variável de ambiente GITHUB_REPOSITORY não encontrada")
             return
 
-        g = Github(github_token)
-        repo = g.get_repo(repo_name)
+        g = Github(token_github)
+        repositorio = g.get_repo(nome_repositorio)
 
         # Obtém o número da PR
         try:
-            pr_ref = os.getenv("GITHUB_REF", "")
-            pr_number = int(pr_ref.split('/')[2])
-            pr = repo.get_pull(pr_number)
+            referencia_pr = os.getenv("GITHUB_REF", "")
+            numero_pr = int(referencia_pr.split('/')[2])
+            pr = repositorio.get_pull(numero_pr)
         except (IndexError, ValueError):
-            print("❌ Could not determine PR number from GITHUB_REF")
+            print("❌ Não foi possível obter o número da PR a partir de GITHUB_REF")
             return
 
-        posted_comments = 0
-        for finding in findings:
+        comentarios_postados = 0
+        for problema in problemas:
             try:
                 # Validação dos campos obrigatórios
-                required_fields = ['issue', 'severity', 'suggestion', 'file', 'line']
-                if not all(field in finding for field in required_fields):
-                    print(f"⚠️ Skipping invalid finding: {finding}")
+                campos_obrigatorios = ['problema', 'gravidade', 'sugestao', 'arquivo', 'linha']
+                if not all(campo in problema for campo in campos_obrigatorios):
+                    print(f"⚠️ Pulando problema inválido: {problema}")
                     continue
 
-                # Cria o comentário
-                comment_body = (
-                    f"🚨 **{finding['issue']}**\n\n"
-                    f"📌 **Severity:** {finding['severity'].upper()}\n"
-                    f"💡 **Suggestion:** {finding['suggestion']}\n"
-                    f"🔗 **File:** `{finding['file']}` Line `{finding['line']}`"
+                # Cria o corpo do comentário
+                corpo_comentario = (
+                    f"🤖 **Análise Automática de Código**\n\n"
+                    f"🚨 **Problema:** {problema['problema']}\n"
+                    f"⚠️ **Gravidade:** {problema['gravidade'].upper()}\n"
+                    f"💡 **Sugestão:** {problema['sugestao']}\n"
+                    f"📂 **Arquivo:** `{problema['arquivo']}` Linha `{problema['linha']}`"
                 )
 
-                # Posta comentário geral na PR
-                pr.create_issue_comment(comment_body)
-                posted_comments += 1
+                # Posta como comentário geral na PR
+                pr.create_issue_comment(corpo_comentario)
+                comentarios_postados += 1
 
             except GithubException as ge:
-                print(f"⚠️ GitHub API error for {finding.get('file', 'unknown')}: {str(ge)}")
+                print(f"⚠️ Erro na API do GitHub para {problema.get('arquivo', 'desconhecido')}: {str(ge)}")
             except Exception as e:
-                print(f"⚠️ Error posting comment for {finding.get('file', 'unknown')}: {str(e)}")
+                print(f"⚠️ Erro ao postar comentário para {problema.get('arquivo', 'desconhecido')}: {str(e)}")
         
-        print(f"✅ Successfully posted {posted_comments}/{len(findings)} comments")
+        print(f"✅ {comentarios_postados}/{len(problemas)} comentários postados com sucesso")
         
     except GithubException as ge:
-        print(f"❌ GitHub API connection failed: {str(ge)}")
+        print(f"❌ Falha na conexão com a API do GitHub: {str(ge)}")
     except Exception as e:
-        print(f"❌ Unexpected error: {str(e)}")
+        print(f"❌ Erro inesperado: {str(e)}")
 
 if __name__ == "__main__":
-    post_comments()
+    postar_comentarios()
