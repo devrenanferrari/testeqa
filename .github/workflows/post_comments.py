@@ -48,6 +48,9 @@ def post_comments():
             print("❌ Could not determine PR number from GITHUB_REF")
             return
         
+        # Obtém o commit mais recente da PR
+        commit = pr.get_commits().reversed[0]
+        
         # Posta os comentários
         posted_comments = 0
         for finding in findings:
@@ -66,11 +69,12 @@ def post_comments():
                     f"🔗 **File:** {finding['file']}#L{finding['line']}"
                 )
 
+                # Método correto para postar comentários em PRs
                 pr.create_review_comment(
                     body=comment_body,
-                    commit_id=pr.head.sha,
                     path=finding['file'],
-                    line=finding['line'] or 1
+                    position=1,  # Posição no diff (pode precisar de ajuste)
+                    commit_id=commit.sha
                 )
                 posted_comments += 1
                 
