@@ -2,6 +2,7 @@ import os
 import requests
 import json
 import time
+import re
 from github import Github
 
 # Configurações
@@ -11,11 +12,17 @@ MODEL_NAME = "deepseek-ai/DeepSeek-R1"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 REPO_NAME = os.getenv("GITHUB_REPOSITORY")
 
-def get_pr_files():
-    g = Github(GITHUB_TOKEN)
-    repo = g.get_repo(REPO_NAME)
-    pr_number = int(os.getenv("GITHUB_REF").split('/')[2])
-    return repo.get_pull(pr_number).get_files()
+def extract_json_from_response(content):
+    """Extrai o JSON da resposta do modelo, mesmo com texto adicional"""
+    try:
+        # Tenta encontrar um bloco JSON na resposta
+        json_match = re.search(r'\[.*\]', content, re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group(0))
+        return json.loads(content)
+    except json.JSONDecodeError:
+        print(f"Could not extract JSON from: {content}")
+        return []
 
 def analyze_with_ai(code_diff, filename):
     headers = {
@@ -26,20 +33,15 @@ def analyze_with_ai(code_diff, filename):
     messages = [
         {
             "role": "system",
-            "content": "You are a senior code reviewer. Analyze the code strictly and report all issues."
+            "content": "You are a strict code reviewer. Return ONLY valid JSON array with found issues."
         },
         {
             "role": "user",
-            "content": f"""Analyze this code diff for File: {filename}
+            "content": f"""Analyze this Python code diff for File: {filename}
 
 {code_diff}
 
-Identify:
-1. Security issues (SQLi, XSS, command injection)
-2. Bugs and logical errors
-3. Code smells (duplication, bad practices)
-
-Return ONLY valid JSON array in this format:
+Return JSON array with format:
 [
     {{
         "line": <number>,
@@ -60,20 +62,20 @@ Return ONLY valid JSON array in this format:
                 json={
                     "messages": messages,
                     "model": MODEL_NAME,
-                    "temperature": 0.1  # Mais determinístico
+                    "temperature": 0.1,
+                    "response_format": {"type": "json_object"}  # Força resposta JSON
                 },
                 timeout=60
             )
             
             if response.status_code == 200:
                 try:
-                    # Extrai o conteúdo JSON da resposta do chat
                     chat_response = response.json()
                     content = chat_response["choices"][0]["message"]["content"]
-                    return json.loads(content)
-                except (json.JSONDecodeError, KeyError) as e:
-                    print(f"Failed to parse response: {str(e)}")
-                    print(f"Raw response: {chat_response}")
+                    print(f"Raw API response: {content}")  # Debug
+                    return extract_json_from_response(content)
+                except (KeyError, json.JSONDecodeError) as e:
+                    print(f"Parse error: {str(e)}")
                     return []
             
             print(f"API Error (attempt {attempt + 1}): {response.status_code} - {response.text}")
@@ -98,6 +100,7 @@ def main():
                     if all(key in issue for key in ['line', 'issue', 'severity', 'suggestion']):
                         issue['file'] = file.filename
                         findings.append(issue)
+                        print(f"Found issue: {issue}")  # Debug
     
     with open("findings.json", "w") as f:
         json.dump({"findings": findings}, f, indent=2)
